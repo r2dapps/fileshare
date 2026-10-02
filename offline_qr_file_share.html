@@ -48,21 +48,21 @@
         </nav>
     </header>
 
-    <main class="flex-grow max-w-3xl w-full mx-auto px-6 py-12 flex flex-col justify-center">
+    <main class="flex-grow max-w-3xl w-full mx-auto px-6 py-8 flex flex-col justify-center">
 
         <!-- SEND VIEW -->
-        <section id="view-send" class="space-y-8">
+        <section id="view-send" class="space-y-6">
             <div class="space-y-2">
                 <h1 class="text-3xl font-light tracking-tight">Transmit File</h1>
-                <p class="text-xs font-mono text-neutral-500 uppercase tracking-wider">Select file up to 2MB for chunked QR code broadcast</p>
+                <p class="text-xs font-mono text-neutral-500 uppercase tracking-wider">Select file up to 2MB for optical QR stream broadcast</p>
             </div>
 
             <!-- Upload Dropzone -->
-            <div id="drop-zone" class="border border-dashed border-[#111111] p-12 text-center cursor-pointer hover:bg-neutral-50 transition-all relative">
+            <div id="drop-zone" class="border border-dashed border-[#111111] p-10 text-center cursor-pointer hover:bg-neutral-50 transition-all relative">
                 <input type="file" id="file-input" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onchange="handleFileSelect(event)">
                 <div id="drop-prompt" class="space-y-3 pointer-events-none">
                     <p class="text-sm font-mono tracking-tight">Drop file here or click to browse</p>
-                    <p class="text-xs text-neutral-400 font-mono">Max limit: 2,097,152 bytes (2MB)</p>
+                    <p class="text-xs text-neutral-400 font-mono">Max limit: 2MB &bull; Automatic Gzip compression enabled</p>
                 </div>
                 <div id="file-meta" class="hidden space-y-2 pointer-events-none">
                     <p class="text-sm font-mono font-bold tracking-tight truncate" id="meta-name"></p>
@@ -73,20 +73,49 @@
             <!-- Action Panel / Controls -->
             <div id="action-panel" class="hidden space-y-6">
                 <div class="flex justify-between items-center text-xs font-mono border-b border-[#e5e5e5] pb-2">
-                    <span id="chunk-info">Chunks: 0 / 0</span>
-                    <span id="speed-indicator">Speed: 1.5s / frame</span>
+                    <span id="chunk-info" class="font-bold">Frame: 0 / 0</span>
+                    <span id="speed-indicator">Speed: 750ms / frame</span>
                 </div>
 
                 <!-- QR Display Container -->
-                <div class="flex flex-col items-center justify-center p-8 subtle-border bg-neutral-50">
-                    <div class="bg-white p-4 mono-border shadow-sm mb-4">
-                        <canvas id="qr-canvas"></canvas>
+                <div class="flex flex-col items-center justify-center p-6 subtle-border bg-neutral-50">
+                    <div class="bg-white p-4 mono-border shadow-sm mb-4 max-w-full overflow-hidden flex items-center justify-center">
+                        <canvas id="qr-canvas" class="max-w-full h-auto w-[280px] sm:w-[360px] md:w-[400px]"></canvas>
                     </div>
-                    <div class="flex items-center space-x-4 text-xs font-mono">
-                        <button onclick="prevChunk()" class="px-3 py-1 mono-border bg-white hover:bg-[#111111] hover:text-white transition-all">&larr; Prev</button>
-                        <button id="btn-toggle-play" onclick="togglePlay()" class="px-4 py-1 bg-[#111111] text-white hover:bg-neutral-800 transition-all">Pause Broadcast</button>
-                        <button onclick="nextChunk()" class="px-3 py-1 mono-border bg-white hover:bg-[#111111] hover:text-white transition-all">Next &rarr;</button>
+                    <div class="flex items-center space-x-3 text-xs font-mono">
+                        <button onclick="prevChunk()" class="px-3 py-1.5 mono-border bg-white hover:bg-[#111111] hover:text-white transition-all">&larr; Prev</button>
+                        <button id="btn-toggle-play" onclick="togglePlay()" class="px-5 py-1.5 bg-[#111111] text-white hover:bg-neutral-800 transition-all font-semibold">Pause Broadcast</button>
+                        <button onclick="nextChunk()" class="px-3 py-1.5 mono-border bg-white hover:bg-[#111111] hover:text-white transition-all">Next &rarr;</button>
                     </div>
+                </div>
+
+                <!-- Speed Control Section -->
+                <div class="space-y-3 p-4 subtle-border bg-neutral-50">
+                    <div class="flex justify-between text-xs font-mono">
+                        <span class="font-bold">Transmission Speed</span>
+                        <span id="speed-label" class="text-neutral-600">750ms (~1.3 fps)</span>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono">
+                        <button onclick="setSpeedPreset(400)" class="speed-btn py-1.5 px-2 mono-border bg-white hover:bg-[#111111] hover:text-white transition-all" data-speed="400">⚡ Fast (400ms)</button>
+                        <button onclick="setSpeedPreset(750)" class="speed-btn py-1.5 px-2 bg-[#111111] text-white font-semibold transition-all" data-speed="750">⚖️ Balanced (750ms)</button>
+                        <button onclick="setSpeedPreset(1200)" class="speed-btn py-1.5 px-2 mono-border bg-white hover:bg-[#111111] hover:text-white transition-all" data-speed="1200">🎯 Safe (1.2s)</button>
+                        <button onclick="setSpeedPreset(2000)" class="speed-btn py-1.5 px-2 mono-border bg-white hover:bg-[#111111] hover:text-white transition-all" data-speed="2000">🐢 Slow (2.0s)</button>
+                    </div>
+                    <input type="range" id="speed-slider" min="250" max="2500" step="50" value="750" oninput="onSpeedSliderChange(this.value)" class="w-full accent-[#111111] cursor-pointer">
+                </div>
+
+                <!-- Targeted Frame Broadcast (Solves Coupon Collector) -->
+                <div class="space-y-2 p-4 subtle-border bg-neutral-50">
+                    <div class="flex justify-between items-center text-xs font-mono">
+                        <span class="font-bold">Targeted Frame Broadcast</span>
+                        <span id="filter-status" class="text-neutral-500">Broadcasting all frames</span>
+                    </div>
+                    <div class="flex space-x-2">
+                        <input type="text" id="target-chunks-input" placeholder="e.g. 5, 12, 18-22 (or paste from receiver)" class="flex-grow px-3 py-1.5 text-xs font-mono mono-border bg-white focus:outline-none focus:ring-1 focus:ring-black">
+                        <button onclick="applyChunkFilter()" class="px-3 py-1.5 text-xs font-mono bg-[#111111] text-white hover:bg-neutral-800 transition-all font-semibold">Filter</button>
+                        <button onclick="resetChunkFilter()" class="px-3 py-1.5 text-xs font-mono mono-border bg-white hover:bg-neutral-100 transition-all">All</button>
+                    </div>
+                    <p class="text-[11px] font-mono text-neutral-400">If the receiver is only missing a few frames, paste them here to loop only the missing packets!</p>
                 </div>
 
                 <!-- Playback Slider -->
@@ -103,18 +132,23 @@
         </section>
 
         <!-- RECEIVE VIEW -->
-        <section id="view-receive" class="hidden space-y-8">
+        <section id="view-receive" class="hidden space-y-6">
             <div class="space-y-2">
                 <h1 class="text-3xl font-light tracking-tight">Receive File</h1>
                 <p class="text-xs font-mono text-neutral-500 uppercase tracking-wider">Scan sequential QR codes using camera feed</p>
             </div>
 
             <!-- Scanner Wrapper -->
-            <div class="subtle-border p-4 bg-neutral-50 space-y-4">
-                <div id="reader" class="w-full overflow-hidden mono-border bg-black aspect-square max-h-[400px] flex items-center justify-center"></div>
+            <div id="scanner-container" class="subtle-border p-4 bg-neutral-50 space-y-4 transition-all duration-150">
+                <div id="reader" class="w-full overflow-hidden mono-border bg-black aspect-square max-h-[380px] flex items-center justify-center relative"></div>
                 <div class="flex justify-between items-center">
-                    <button id="btn-start-scan" onclick="startScanner()" class="px-4 py-2 bg-[#111111] text-white text-xs font-mono uppercase tracking-wider hover:bg-neutral-800 transition-all">Start Camera Scanner</button>
-                    <button id="btn-stop-scan" onclick="stopScanner()" class="hidden px-4 py-2 mono-border bg-white text-xs font-mono uppercase tracking-wider hover:bg-neutral-100 transition-all">Stop Camera</button>
+                    <div class="flex space-x-2">
+                        <button id="btn-start-scan" onclick="startScanner()" class="px-4 py-2 bg-[#111111] text-white text-xs font-mono uppercase tracking-wider hover:bg-neutral-800 transition-all">Start Camera Scanner</button>
+                        <button id="btn-stop-scan" onclick="stopScanner()" class="hidden px-4 py-2 mono-border bg-white text-xs font-mono uppercase tracking-wider hover:bg-neutral-100 transition-all">Stop Camera</button>
+                    </div>
+                    <button id="btn-toggle-sound" onclick="toggleSound()" class="px-3 py-2 mono-border bg-white text-xs font-mono hover:bg-neutral-100 transition-all" title="Toggle audio feedback">
+                        🔊 Sound: ON
+                    </button>
                 </div>
             </div>
 
@@ -122,24 +156,37 @@
             <div class="space-y-3 mono-border p-6 bg-white">
                 <div class="flex justify-between text-xs font-mono">
                     <span id="rx-status">Status: Waiting for transmission...</span>
-                    <span id="rx-progress">0%</span>
+                    <span id="rx-progress" class="font-bold">0%</span>
                 </div>
-                <div class="w-full bg-neutral-100 h-2 overflow-hidden">
-                    <div id="rx-bar" class="bg-[#111111] h-full w-0 transition-all duration-200"></div>
+                <div class="w-full bg-neutral-100 h-2.5 overflow-hidden">
+                    <div id="rx-bar" class="bg-[#111111] h-full w-0 transition-all duration-150"></div>
                 </div>
-                <div id="rx-details" class="text-xs font-mono text-neutral-500">
-                    Chunks received: 0 / 0
+                <div class="flex justify-between items-center text-xs font-mono text-neutral-500">
+                    <span id="rx-details">Chunks received: 0 / 0</span>
+                    <span id="rx-last-frame" class="text-neutral-400">Last frame: None</span>
+                </div>
+
+                <!-- Missing Chunks Box -->
+                <div id="missing-chunks-panel" class="hidden pt-3 border-t border-[#e5e5e5] space-y-2">
+                    <div class="flex justify-between items-center text-xs font-mono">
+                        <span class="font-bold text-neutral-700" id="missing-count-label">Missing Frames: 0</span>
+                        <button onclick="copyMissingChunks()" id="btn-copy-missing" class="px-2.5 py-1 text-[11px] mono-border bg-white hover:bg-[#111111] hover:text-white transition-all font-semibold">Copy Missing</button>
+                    </div>
+                    <div id="missing-chunks-list" class="max-h-20 overflow-y-auto p-2 bg-neutral-50 text-[11px] font-mono text-neutral-700 break-words subtle-border"></div>
                 </div>
             </div>
 
             <!-- Completed Download Area -->
             <div id="complete-area" class="hidden space-y-4 border border-[#111111] p-6 bg-neutral-50">
                 <div class="space-y-1">
-                    <p class="text-xs font-mono uppercase tracking-wider text-neutral-500">File Assembly Complete</p>
+                    <p class="text-xs font-mono uppercase tracking-wider text-emerald-600 font-bold">&check; File Assembly Complete</p>
                     <p class="text-sm font-mono font-bold" id="rx-filename">file.bin</p>
                 </div>
-                <a id="download-link" class="block w-full py-3 bg-[#111111] text-white text-center text-xs font-mono uppercase tracking-wider hover:bg-neutral-800 transition-all">Download Received File</a>
+                <a id="download-link" class="block w-full py-3 bg-[#111111] text-white text-center text-xs font-mono uppercase tracking-wider hover:bg-neutral-800 transition-all cursor-pointer">Download Received File</a>
             </div>
+
+            <!-- Receiver Reset -->
+            <button onclick="resetReceiver()" class="w-full py-2.5 mono-border text-xs font-mono uppercase tracking-wider hover:bg-[#111111] hover:text-white transition-all">Reset Receiver</button>
         </section>
 
     </main>
@@ -156,16 +203,23 @@
         let isPlaying = true;
         let playInterval = null;
         let qrInstance = null;
+        let broadcastSpeed = 750; // Default 750ms (balanced for camera scan)
+
+        // Filter / Targeted Broadcast State
+        let filterList = [];
+        let activeChunkIndices = [];
+        let activeSubIndex = 0;
 
         // Receiver state
         let html5QrCode = null;
         let totalExpectedChunks = 0;
         let receivedChunksMap = {};
-        let fileMetaInfo = null;
         let isReceivingComplete = false;
+        let audioCtx = null;
+        let soundEnabled = true;
 
-        // QR payload chunk size (optimized for robust scanning density)
-        const CHUNK_SIZE = 450; 
+        // QR payload chunk size (380 characters ensures Version 11 QR code with high-contrast large modules)
+        const CHUNK_SIZE = 380;
 
         function switchTab(tab) {
             activeTab = tab;
@@ -189,7 +243,57 @@
             }
         }
 
-        function handleFileSelect(event) {
+        // Native Stream Compression / Decompression
+        async function compressArrayBuffer(buffer) {
+            if (typeof CompressionStream !== 'undefined') {
+                try {
+                    const stream = new Blob([buffer]).stream().pipeThrough(new CompressionStream('gzip'));
+                    const response = new Response(stream);
+                    const blob = await response.blob();
+                    return {
+                        data: await blob.arrayBuffer(),
+                        isCompressed: true
+                    };
+                } catch (err) {
+                    console.warn('Compression fallback to uncompressed', err);
+                }
+            }
+            return { data: buffer, isCompressed: false };
+        }
+
+        async function decompressArrayBuffer(buffer) {
+            if (typeof DecompressionStream !== 'undefined') {
+                const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
+                const response = new Response(stream);
+                const blob = await response.blob();
+                return await blob.arrayBuffer();
+            }
+            return buffer;
+        }
+
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const len = bytes.byteLength;
+            const chunkSize = 8192;
+            for (let i = 0; i < len; i += chunkSize) {
+                const sub = bytes.subarray(i, Math.min(i + chunkSize, len));
+                binary += String.fromCharCode.apply(null, sub);
+            }
+            return btoa(binary);
+        }
+
+        function base64ToArrayBuffer(base64) {
+            const binary = atob(base64);
+            const len = binary.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        async function handleFileSelect(event) {
             const file = event.target.files[0];
             if (!file) return;
 
@@ -200,51 +304,82 @@
                 return;
             }
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const base64Data = e.target.result;
-                processFileIntoChunks(file.name, file.type, base64Data);
-            };
-            reader.readAsDataURL(file);
+            const dropPrompt = document.getElementById('drop-prompt');
+            const prevContent = dropPrompt.innerHTML;
+            dropPrompt.innerHTML = '<p class="text-sm font-mono tracking-tight animate-pulse">Compressing & packaging file...</p>';
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const { data: processedBuffer, isCompressed } = await compressArrayBuffer(arrayBuffer);
+                const base64Data = arrayBufferToBase64(processedBuffer);
+                processFileIntoChunks(file.name, file.type, file.size, base64Data, isCompressed);
+            } catch (err) {
+                console.error("Error reading file", err);
+                alert("Failed to process file: " + err.message);
+                dropPrompt.innerHTML = prevContent;
+            }
         }
 
-        function processFileIntoChunks(name, type, dataUrl) {
-            // Construct a metadata prefix packet
+        function processFileIntoChunks(name, type, originalSize, base64Data, isCompressed) {
             const metaObj = {
                 n: name,
                 t: type || 'application/octet-stream',
-                d: dataUrl
+                s: originalSize,
+                z: isCompressed ? 1 : 0,
+                d: base64Data
             };
             const jsonString = JSON.stringify(metaObj);
-            
+
             fileChunks = [];
             for (let i = 0; i < jsonString.length; i += CHUNK_SIZE) {
                 fileChunks.push(jsonString.substring(i, i + CHUNK_SIZE));
             }
 
             const total = fileChunks.length;
-            
+            filterList = [];
+            updateActiveIndices();
+
             // Update UI elements
             document.getElementById('drop-prompt').classList.add('hidden');
             const metaDiv = document.getElementById('file-meta');
             metaDiv.classList.remove('hidden');
             document.getElementById('meta-name').innerText = name;
-            document.getElementById('meta-details').innerText = `${(dataUrl.length / 1024).toFixed(1)} KB base64 data | ${total} QR Frames`;
+
+            const origKb = (originalSize / 1024).toFixed(1);
+            const compKb = (base64Data.length * 0.75 / 1024).toFixed(1);
+            const compressionNote = isCompressed ? ` (Compressed to ${compKb} KB)` : '';
+            document.getElementById('meta-details').innerText = `${origKb} KB original${compressionNote} &bull; ${total} QR Frames`;
 
             document.getElementById('action-panel').classList.remove('hidden');
             document.getElementById('chunk-slider').max = total;
             document.getElementById('chunk-slider').value = 1;
 
+            updateSpeedUI();
             currentChunkIndex = 0;
             initQR();
             startPlayback();
+        }
+
+        function updateActiveIndices() {
+            if (filterList.length > 0) {
+                activeChunkIndices = filterList.map(n => n - 1).filter(idx => idx >= 0 && idx < fileChunks.length);
+                if (activeChunkIndices.length === 0) {
+                    activeChunkIndices = fileChunks.map((_, i) => i);
+                }
+            } else {
+                activeChunkIndices = fileChunks.map((_, i) => i);
+            }
+            activeSubIndex = 0;
+            if (activeChunkIndices.length > 0) {
+                currentChunkIndex = activeChunkIndices[0];
+            }
         }
 
         function initQR() {
             if (!qrInstance) {
                 qrInstance = new QRious({
                     element: document.getElementById('qr-canvas'),
-                    size: 280,
+                    size: 400, // High resolution for effortless camera lock
                     level: 'L',
                     value: 'EMPTY'
                 });
@@ -255,58 +390,217 @@
         function renderCurrentChunk() {
             if (fileChunks.length === 0) return;
             const chunkText = fileChunks[currentChunkIndex];
-            const payload = `OFFLINEFILE|${currentChunkIndex + 1}|${fileChunks.length}|${chunkText}`;
-            
+            const payload = `OF2|${currentChunkIndex + 1}|${fileChunks.length}|${chunkText}`;
+
             qrInstance.set({ value: payload });
-            document.getElementById('chunk-info').innerText = `Frame: ${currentChunkIndex + 1} / ${fileChunks.length}`;
+
+            const filterInfo = filterList.length > 0 ? ` (Filtered ${activeSubIndex + 1} of ${activeChunkIndices.length})` : '';
+            document.getElementById('chunk-info').innerText = `Frame: ${currentChunkIndex + 1} / ${fileChunks.length}${filterInfo}`;
             document.getElementById('slider-val').innerText = currentChunkIndex + 1;
             document.getElementById('chunk-slider').value = currentChunkIndex + 1;
         }
 
         function startPlayback() {
-            if (playInterval) clearInterval(playInterval);
+            restartInterval();
             isPlaying = true;
             document.getElementById('btn-toggle-play').innerText = 'Pause Broadcast';
-            
-            playInterval = setInterval(() => {
-                if (!isPlaying) return;
-                currentChunkIndex = (currentChunkIndex + 1) % fileChunks.length;
-                renderCurrentChunk();
-            }, 300); // 300ms per frame for smooth continuous scanning
+        }
+
+        function restartInterval() {
+            if (playInterval) clearInterval(playInterval);
+            playInterval = null;
+
+            if (isPlaying && activeChunkIndices.length > 0) {
+                playInterval = setInterval(() => {
+                    advanceChunk();
+                }, broadcastSpeed);
+            }
+        }
+
+        function advanceChunk() {
+            if (!isPlaying || activeChunkIndices.length === 0) return;
+            activeSubIndex = (activeSubIndex + 1) % activeChunkIndices.length;
+            currentChunkIndex = activeChunkIndices[activeSubIndex];
+            renderCurrentChunk();
         }
 
         function togglePlay() {
             isPlaying = !isPlaying;
             document.getElementById('btn-toggle-play').innerText = isPlaying ? 'Pause Broadcast' : 'Resume Broadcast';
+            if (isPlaying) {
+                restartInterval();
+            } else if (playInterval) {
+                clearInterval(playInterval);
+                playInterval = null;
+            }
         }
 
         function nextChunk() {
-            if (fileChunks.length === 0) return;
-            currentChunkIndex = (currentChunkIndex + 1) % fileChunks.length;
+            if (activeChunkIndices.length === 0) return;
+            activeSubIndex = (activeSubIndex + 1) % activeChunkIndices.length;
+            currentChunkIndex = activeChunkIndices[activeSubIndex];
             renderCurrentChunk();
         }
 
         function prevChunk() {
-            if (fileChunks.length === 0) return;
-            currentChunkIndex = (currentChunkIndex - 1 + fileChunks.length) % fileChunks.length;
+            if (activeChunkIndices.length === 0) return;
+            activeSubIndex = (activeSubIndex - 1 + activeChunkIndices.length) % activeChunkIndices.length;
+            currentChunkIndex = activeChunkIndices[activeSubIndex];
             renderCurrentChunk();
         }
 
         function onSliderChange(val) {
-            currentChunkIndex = parseInt(val) - 1;
+            const targetIdx = parseInt(val, 10) - 1;
+            currentChunkIndex = targetIdx;
+            // update subIndex if in filter
+            const foundSub = activeChunkIndices.indexOf(targetIdx);
+            if (foundSub !== -1) {
+                activeSubIndex = foundSub;
+            }
             renderCurrentChunk();
+        }
+
+        // Speed Controls
+        function setSpeedPreset(speed) {
+            broadcastSpeed = parseInt(speed, 10);
+            document.getElementById('speed-slider').value = broadcastSpeed;
+            updateSpeedUI();
+            restartInterval();
+        }
+
+        function onSpeedSliderChange(val) {
+            broadcastSpeed = parseInt(val, 10);
+            updateSpeedUI();
+            restartInterval();
+        }
+
+        function updateSpeedUI() {
+            const fps = (1000 / broadcastSpeed).toFixed(1);
+            const label = `${broadcastSpeed}ms (~${fps} fps)`;
+            document.getElementById('speed-label').innerText = label;
+            document.getElementById('speed-indicator').innerText = `Speed: ${label}`;
+
+            document.querySelectorAll('.speed-btn').forEach(btn => {
+                const s = parseInt(btn.getAttribute('data-speed'), 10);
+                if (s === broadcastSpeed) {
+                    btn.className = "speed-btn py-1.5 px-2 bg-[#111111] text-white font-semibold transition-all";
+                } else {
+                    btn.className = "speed-btn py-1.5 px-2 mono-border bg-white text-[#111111] hover:bg-[#111111] hover:text-white transition-all";
+                }
+            });
+        }
+
+        // Targeted Chunk Filtering
+        function parseChunkRange(str) {
+            const result = new Set();
+            const tokens = str.split(/[\s,]+/);
+            for (const t of tokens) {
+                if (!t) continue;
+                if (t.includes('-')) {
+                    const [start, end] = t.split('-').map(x => parseInt(x, 10));
+                    if (!isNaN(start) && !isNaN(end) && start <= end) {
+                        for (let k = start; k <= end; k++) {
+                            result.add(k);
+                        }
+                    }
+                } else {
+                    const num = parseInt(t, 10);
+                    if (!isNaN(num)) result.add(num);
+                }
+            }
+            return Array.from(result).sort((a, b) => a - b);
+        }
+
+        function applyChunkFilter() {
+            const inputVal = document.getElementById('target-chunks-input').value.trim();
+            if (!inputVal) {
+                resetChunkFilter();
+                return;
+            }
+            const parsed = parseChunkRange(inputVal);
+            if (parsed.length === 0) {
+                alert("Please enter valid frame numbers (e.g. 5, 12, 18-22)");
+                return;
+            }
+            filterList = parsed;
+            updateActiveIndices();
+            document.getElementById('filter-status').innerText = `Filtering: ${activeChunkIndices.length} specific frame(s)`;
+            document.getElementById('filter-status').className = "text-amber-600 font-bold";
+            renderCurrentChunk();
+            restartInterval();
+        }
+
+        function resetChunkFilter() {
+            filterList = [];
+            document.getElementById('target-chunks-input').value = '';
+            document.getElementById('filter-status').innerText = "Broadcasting all frames";
+            document.getElementById('filter-status').className = "text-neutral-500";
+            updateActiveIndices();
+            renderCurrentChunk();
+            restartInterval();
         }
 
         function resetSend() {
             if (playInterval) clearInterval(playInterval);
+            playInterval = null;
             fileChunks = [];
+            filterList = [];
+            activeChunkIndices = [];
             currentChunkIndex = 0;
             document.getElementById('file-input').value = '';
+            document.getElementById('drop-prompt').innerHTML = `
+                <p class="text-sm font-mono tracking-tight">Drop file here or click to browse</p>
+                <p class="text-xs text-neutral-400 font-mono">Max limit: 2MB &bull; Automatic Gzip compression enabled</p>
+            `;
             document.getElementById('drop-prompt').classList.remove('hidden');
             document.getElementById('file-meta').classList.add('hidden');
             document.getElementById('action-panel').classList.add('hidden');
         }
 
+        // Web Audio Feedback
+        function playBeep(freq = 880, duration = 0.04) {
+            if (!soundEnabled) return;
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {}
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const btn = document.getElementById('btn-toggle-sound');
+            btn.innerText = soundEnabled ? '🔊 Sound: ON' : '🔇 Sound: OFF';
+            btn.className = soundEnabled 
+                ? "px-3 py-2 mono-border bg-white text-xs font-mono hover:bg-neutral-100 transition-all"
+                : "px-3 py-2 mono-border bg-neutral-200 text-neutral-500 text-xs font-mono transition-all";
+        }
+
+        function triggerScanVisualPulse() {
+            const box = document.getElementById('scanner-container');
+            if (!box) return;
+            box.style.borderColor = '#10b981';
+            box.style.boxShadow = '0 0 12px rgba(16, 185, 129, 0.3)';
+            setTimeout(() => {
+                box.style.borderColor = '#e5e5e5';
+                box.style.boxShadow = 'none';
+            }, 120);
+        }
+
+        // Receiver Scanner
         function initScannerInstance() {
             if (!html5QrCode) {
                 html5QrCode = new Html5Qrcode("reader");
@@ -315,8 +609,19 @@
 
         function startScanner() {
             initScannerInstance();
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-            
+            const config = {
+                fps: 20,
+                qrbox: function(viewfinderWidth, viewfinderHeight) {
+                    const minDim = Math.min(viewfinderWidth, viewfinderHeight);
+                    const edge = Math.floor(minDim * 0.85);
+                    return { width: edge, height: edge };
+                },
+                aspectRatio: 1.0,
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
+                }
+            };
+
             html5QrCode.start(
                 { facingMode: "environment" },
                 config,
@@ -325,9 +630,21 @@
             ).then(() => {
                 document.getElementById('btn-start-scan').classList.add('hidden');
                 document.getElementById('btn-stop-scan').classList.remove('hidden');
-                document.getElementById('rx-status').innerText = 'Status: Scanning active...';
+                document.getElementById('rx-status').innerText = 'Status: Camera active, scanning for QR stream...';
             }).catch(err => {
-                alert("Camera initialization failed. Please ensure camera permissions are granted.");
+                console.warn("Environment camera failed, trying fallback camera", err);
+                html5QrCode.start(
+                    {},
+                    config,
+                    onQrScanSuccess,
+                    onQrScanError
+                ).then(() => {
+                    document.getElementById('btn-start-scan').classList.add('hidden');
+                    document.getElementById('btn-stop-scan').classList.remove('hidden');
+                    document.getElementById('rx-status').innerText = 'Status: Camera active, scanning for QR stream...';
+                }).catch(err2 => {
+                    alert("Camera initialization failed: " + (err2.message || err2) + "\nPlease ensure camera permissions are granted.");
+                });
             });
         }
 
@@ -344,19 +661,33 @@
         function onQrScanSuccess(decodedText) {
             if (isReceivingComplete) return;
 
-            if (!decodedText.startsWith("OFFLINEFILE|")) {
+            let index, total, chunkContent;
+            if (decodedText.startsWith("OF2|")) {
+                const parts = decodedText.split('|');
+                if (parts.length < 4) return;
+                index = parseInt(parts[1], 10);
+                total = parseInt(parts[2], 10);
+                chunkContent = parts.slice(3).join('|');
+            } else if (decodedText.startsWith("OFFLINEFILE|")) {
+                const parts = decodedText.split('|');
+                if (parts.length < 4) return;
+                index = parseInt(parts[1], 10);
+                total = parseInt(parts[2], 10);
+                chunkContent = parts.slice(3).join('|');
+            } else {
                 return; // Ignore foreign QR codes
             }
 
-            const parts = decodedText.split('|');
-            if (parts.length < 4) return;
+            if (isNaN(index) || isNaN(total) || index < 1 || index > total) return;
 
-            const index = parseInt(parts[1]);
-            const total = parseInt(parts[2]);
-            const chunkContent = parts.slice(3).join('|');
-
+            const isNewChunk = !receivedChunksMap[index];
             totalExpectedChunks = total;
             receivedChunksMap[index] = chunkContent;
+
+            if (isNewChunk) {
+                playBeep(920, 0.04);
+                triggerScanVisualPulse();
+            }
 
             const receivedCount = Object.keys(receivedChunksMap).length;
             const percent = Math.round((receivedCount / total) * 100);
@@ -364,6 +695,9 @@
             document.getElementById('rx-progress').innerText = `${percent}%`;
             document.getElementById('rx-bar').style.width = `${percent}%`;
             document.getElementById('rx-details').innerText = `Chunks received: ${receivedCount} / ${total}`;
+            document.getElementById('rx-last-frame').innerText = `Last frame: #${index} ${isNewChunk ? '✓ New' : '(Duplicate)'}`;
+
+            updateMissingChunksUI(total, receivedCount);
 
             if (receivedCount === total) {
                 assembleReceivedFile();
@@ -371,37 +705,144 @@
         }
 
         function onQrScanError(errorMessage) {
-            // Continuous scanning frame errors can be ignored safely
+            // Frame scan errors are safely ignored during continuous streaming
         }
 
-        function assembleReceivedFile() {
-            isReceivingComplete = true;
-            stopScanner();
+        function updateMissingChunksUI(total, receivedCount) {
+            const missingPanel = document.getElementById('missing-chunks-panel');
+            const missingListDiv = document.getElementById('missing-chunks-list');
+            const missingLabel = document.getElementById('missing-count-label');
 
-            let fullJson = '';
-            for (let i = 1; i <= totalExpectedChunks; i++) {
-                if (receivedChunksMap[i]) {
-                    fullJson += receivedChunksMap[i];
+            if (receivedCount === total) {
+                missingPanel.classList.add('hidden');
+                return;
+            }
+
+            missingPanel.classList.remove('hidden');
+
+            const missingIndices = [];
+            for (let i = 1; i <= total; i++) {
+                if (!receivedChunksMap[i]) {
+                    missingIndices.push(i);
                 }
             }
 
+            missingLabel.innerText = `Missing Frames: ${missingIndices.length} / ${total}`;
+            const rangeStr = formatRanges(missingIndices);
+            missingListDiv.innerText = rangeStr;
+            missingListDiv.dataset.raw = missingIndices.join(', ');
+        }
+
+        function formatRanges(nums) {
+            if (nums.length === 0) return 'None';
+            if (nums.length > 50) {
+                return nums.slice(0, 40).join(', ') + `... (+${nums.length - 40} more)`;
+            }
+            const ranges = [];
+            let start = nums[0];
+            let end = nums[0];
+            for (let i = 1; i < nums.length; i++) {
+                if (nums[i] === end + 1) {
+                    end = nums[i];
+                } else {
+                    ranges.push(start === end ? `${start}` : `${start}-${end}`);
+                    start = nums[i];
+                    end = nums[i];
+                }
+            }
+            ranges.push(start === end ? `${start}` : `${start}-${end}`);
+            return ranges.join(', ');
+        }
+
+        function copyMissingChunks() {
+            const missingListDiv = document.getElementById('missing-chunks-list');
+            const raw = missingListDiv.dataset.raw || missingListDiv.innerText;
+            navigator.clipboard.writeText(raw).then(() => {
+                const btn = document.getElementById('btn-copy-missing');
+                btn.innerText = 'Copied!';
+                setTimeout(() => { btn.innerText = 'Copy Missing'; }, 1500);
+            }).catch(() => {
+                alert("Missing frames: " + raw);
+            });
+        }
+
+        async function assembleReceivedFile() {
+            isReceivingComplete = true;
+            stopScanner();
+
+            // Verify completeness
+            const missing = [];
+            let fullPayload = '';
+            for (let i = 1; i <= totalExpectedChunks; i++) {
+                if (receivedChunksMap[i]) {
+                    fullPayload += receivedChunksMap[i];
+                } else {
+                    missing.push(i);
+                }
+            }
+
+            if (missing.length > 0) {
+                document.getElementById('rx-status').innerText = `Assembly error: missing ${missing.length} frames.`;
+                return;
+            }
+
             try {
-                fileMetaInfo = JSON.parse(fullJson);
-                document.getElementById('rx-status').innerText = 'Status: Assembly successful.';
-                
+                document.getElementById('rx-status').innerText = 'Decompressing and preparing file...';
+                const fileMetaInfo = JSON.parse(fullPayload);
+                const fileName = fileMetaInfo.n || 'transferred_file.bin';
+                const fileType = fileMetaInfo.t || 'application/octet-stream';
+
+                let finalBlob;
+                if (fileMetaInfo.z === 1) {
+                    // Decompress gzip payload
+                    const compressedBuffer = base64ToArrayBuffer(fileMetaInfo.d);
+                    const decompressedBuffer = await decompressArrayBuffer(compressedBuffer);
+                    finalBlob = new Blob([decompressedBuffer], { type: fileType });
+                } else if (fileMetaInfo.d.startsWith('data:')) {
+                    // Legacy DataURL
+                    const resp = await fetch(fileMetaInfo.d);
+                    finalBlob = await resp.blob();
+                } else {
+                    const rawBuffer = base64ToArrayBuffer(fileMetaInfo.d);
+                    finalBlob = new Blob([rawBuffer], { type: fileType });
+                }
+
+                const objectUrl = URL.createObjectURL(finalBlob);
+
+                document.getElementById('rx-status').innerText = 'Status: Assembly successful!';
                 const completeArea = document.getElementById('complete-area');
                 completeArea.classList.remove('hidden');
-                document.getElementById('rx-filename').innerText = fileMetaInfo.n;
+                document.getElementById('rx-filename').innerText = `${fileName} (${(finalBlob.size / 1024).toFixed(1)} KB)`;
 
                 const downloadLink = document.getElementById('download-link');
-                downloadLink.href = fileMetaInfo.d;
-                downloadLink.download = fileMetaInfo.n;
+                downloadLink.href = objectUrl;
+                downloadLink.download = fileName;
 
-                // Auto trigger click download option
+                // Auto trigger download
                 downloadLink.click();
+
+                // Pleasant completion audio chime
+                playBeep(523.25, 0.08);
+                setTimeout(() => playBeep(659.25, 0.08), 100);
+                setTimeout(() => playBeep(783.99, 0.16), 200);
             } catch (err) {
+                console.error("Assembly error", err);
                 document.getElementById('rx-status').innerText = 'Status: Assembly error - corrupted packets.';
             }
+        }
+
+        function resetReceiver() {
+            totalExpectedChunks = 0;
+            receivedChunksMap = {};
+            isReceivingComplete = false;
+            document.getElementById('rx-status').innerText = 'Status: Waiting for transmission...';
+            document.getElementById('rx-progress').innerText = '0%';
+            document.getElementById('rx-bar').style.width = '0%';
+            document.getElementById('rx-details').innerText = 'Chunks received: 0 / 0';
+            document.getElementById('rx-last-frame').innerText = 'Last frame: None';
+            document.getElementById('missing-chunks-panel').classList.add('hidden');
+            document.getElementById('complete-area').classList.add('hidden');
+            document.getElementById('download-link').href = '#';
         }
     </script>
 </body>
