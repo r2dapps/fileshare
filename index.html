@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline QR File Share</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- qrious for QR code generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <!-- html5-qrcode for camera scanning -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        body {
+            background-color: #ffffff;
+            color: #111111;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        .mono-border {
+            border: 1px solid #111111;
+        }
+        .subtle-border {
+            border: 1px solid #e5e5e5;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #ffffff;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #111111;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-black selection:text-white">
+
+    <header class="w-full border-b border-[#e5e5e5] px-6 py-4 flex justify-between items-center bg-white sticky top-0 z-50">
+        <div class="flex items-center space-x-2">
+            <span class="font-mono text-xs uppercase tracking-widest bg-[#111111] text-white px-2 py-1">Offline Protocol</span>
+            <span class="text-sm font-medium tracking-tight">QR Transfer</span>
+        </div>
+        <nav class="flex space-x-1">
+            <button id="nav-send" onclick="switchTab('send')" class="px-4 py-2 text-xs font-mono uppercase tracking-wider bg-[#111111] text-white transition-all">Send</button>
+            <button id="nav-receive" onclick="switchTab('receive')" class="px-4 py-2 text-xs font-mono uppercase tracking-wider bg-white text-[#111111] border border-[#111111] hover:bg-[#111111] hover:text-white transition-all">Receive</button>
+        </nav>
+    </header>
+
+    <main class="flex-grow max-w-3xl w-full mx-auto px-6 py-12 flex flex-col justify-center">
+
+        <!-- SEND VIEW -->
+        <section id="view-send" class="space-y-8">
+            <div class="space-y-2">
+                <h1 class="text-3xl font-light tracking-tight">Transmit File</h1>
+                <p class="text-xs font-mono text-neutral-500 uppercase tracking-wider">Select file up to 2MB for chunked QR code broadcast</p>
+            </div>
+
+            <!-- Upload Dropzone -->
+            <div id="drop-zone" class="border border-dashed border-[#111111] p-12 text-center cursor-pointer hover:bg-neutral-50 transition-all relative">
+                <input type="file" id="file-input" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onchange="handleFileSelect(event)">
+                <div id="drop-prompt" class="space-y-3 pointer-events-none">
+                    <p class="text-sm font-mono tracking-tight">Drop file here or click to browse</p>
+                    <p class="text-xs text-neutral-400 font-mono">Max limit: 2,097,152 bytes (2MB)</p>
+                </div>
+                <div id="file-meta" class="hidden space-y-2 pointer-events-none">
+                    <p class="text-sm font-mono font-bold tracking-tight truncate" id="meta-name"></p>
+                    <p class="text-xs font-mono text-neutral-500" id="meta-details"></p>
+                </div>
+            </div>
+
+            <!-- Action Panel / Controls -->
+            <div id="action-panel" class="hidden space-y-6">
+                <div class="flex justify-between items-center text-xs font-mono border-b border-[#e5e5e5] pb-2">
+                    <span id="chunk-info">Chunks: 0 / 0</span>
+                    <span id="speed-indicator">Speed: 1.5s / frame</span>
+                </div>
+
+                <!-- QR Display Container -->
+                <div class="flex flex-col items-center justify-center p-8 subtle-border bg-neutral-50">
+                    <div class="bg-white p-4 mono-border shadow-sm mb-4">
+                        <canvas id="qr-canvas"></canvas>
+                    </div>
+                    <div class="flex items-center space-x-4 text-xs font-mono">
+                        <button onclick="prevChunk()" class="px-3 py-1 mono-border bg-white hover:bg-[#111111] hover:text-white transition-all">&larr; Prev</button>
+                        <button id="btn-toggle-play" onclick="togglePlay()" class="px-4 py-1 bg-[#111111] text-white hover:bg-neutral-800 transition-all">Pause Broadcast</button>
+                        <button onclick="nextChunk()" class="px-3 py-1 mono-border bg-white hover:bg-[#111111] hover:text-white transition-all">Next &rarr;</button>
+                    </div>
+                </div>
+
+                <!-- Playback Slider -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs font-mono text-neutral-500">
+                        <span>Sequence Index</span>
+                        <span id="slider-val">1</span>
+                    </div>
+                    <input type="range" id="chunk-slider" min="1" max="1" value="1" oninput="onSliderChange(this.value)" class="w-full accent-[#111111] cursor-pointer">
+                </div>
+
+                <button onclick="resetSend()" class="w-full py-3 mono-border text-xs font-mono uppercase tracking-wider hover:bg-[#111111] hover:text-white transition-all">Clear & Upload Another</button>
+            </div>
+        </section>
+
+        <!-- RECEIVE VIEW -->
+        <section id="view-receive" class="hidden space-y-8">
+            <div class="space-y-2">
+                <h1 class="text-3xl font-light tracking-tight">Receive File</h1>
+                <p class="text-xs font-mono text-neutral-500 uppercase tracking-wider">Scan sequential QR codes using camera feed</p>
+            </div>
+
+            <!-- Scanner Wrapper -->
+            <div class="subtle-border p-4 bg-neutral-50 space-y-4">
+                <div id="reader" class="w-full overflow-hidden mono-border bg-black aspect-square max-h-[400px] flex items-center justify-center"></div>
+                <div class="flex justify-between items-center">
+                    <button id="btn-start-scan" onclick="startScanner()" class="px-4 py-2 bg-[#111111] text-white text-xs font-mono uppercase tracking-wider hover:bg-neutral-800 transition-all">Start Camera Scanner</button>
+                    <button id="btn-stop-scan" onclick="stopScanner()" class="hidden px-4 py-2 mono-border bg-white text-xs font-mono uppercase tracking-wider hover:bg-neutral-100 transition-all">Stop Camera</button>
+                </div>
+            </div>
+
+            <!-- Receiving Progress -->
+            <div class="space-y-3 mono-border p-6 bg-white">
+                <div class="flex justify-between text-xs font-mono">
+                    <span id="rx-status">Status: Waiting for transmission...</span>
+                    <span id="rx-progress">0%</span>
+                </div>
+                <div class="w-full bg-neutral-100 h-2 overflow-hidden">
+                    <div id="rx-bar" class="bg-[#111111] h-full w-0 transition-all duration-200"></div>
+                </div>
+                <div id="rx-details" class="text-xs font-mono text-neutral-500">
+                    Chunks received: 0 / 0
+                </div>
+            </div>
+
+            <!-- Completed Download Area -->
+            <div id="complete-area" class="hidden space-y-4 border border-[#111111] p-6 bg-neutral-50">
+                <div class="space-y-1">
+                    <p class="text-xs font-mono uppercase tracking-wider text-neutral-500">File Assembly Complete</p>
+                    <p class="text-sm font-mono font-bold" id="rx-filename">file.bin</p>
+                </div>
+                <a id="download-link" class="block w-full py-3 bg-[#111111] text-white text-center text-xs font-mono uppercase tracking-wider hover:bg-neutral-800 transition-all">Download Received File</a>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="w-full border-t border-[#e5e5e5] px-6 py-4 text-center text-xs font-mono text-neutral-400">
+        Secure Offline Data Transfer &bull; Zero Server &bull; Client-Side QR Pipeline
+    </footer>
+
+    <script>
+        // Global State variables
+        let activeTab = 'send';
+        let fileChunks = [];
+        let currentChunkIndex = 0;
+        let isPlaying = true;
+        let playInterval = null;
+        let qrInstance = null;
+
+        // Receiver state
+        let html5QrCode = null;
+        let totalExpectedChunks = 0;
+        let receivedChunksMap = {};
+        let fileMetaInfo = null;
+        let isReceivingComplete = false;
+
+        // QR payload chunk size (optimized for robust scanning density)
+        const CHUNK_SIZE = 450; 
+
+        function switchTab(tab) {
+            activeTab = tab;
+            const sendSec = document.getElementById('view-send');
+            const recvSec = document.getElementById('view-receive');
+            const navSend = document.getElementById('nav-send');
+            const navRecv = document.getElementById('nav-receive');
+
+            if (tab === 'send') {
+                sendSec.classList.remove('hidden');
+                recvSec.classList.add('hidden');
+                navSend.className = "px-4 py-2 text-xs font-mono uppercase tracking-wider bg-[#111111] text-white transition-all";
+                navRecv.className = "px-4 py-2 text-xs font-mono uppercase tracking-wider bg-white text-[#111111] border border-[#111111] hover:bg-[#111111] hover:text-white transition-all";
+                stopScanner();
+            } else {
+                sendSec.classList.add('hidden');
+                recvSec.classList.remove('hidden');
+                navRecv.className = "px-4 py-2 text-xs font-mono uppercase tracking-wider bg-[#111111] text-white transition-all";
+                navSend.className = "px-4 py-2 text-xs font-mono uppercase tracking-wider bg-white text-[#111111] border border-[#111111] hover:bg-[#111111] hover:text-white transition-all";
+                initScannerInstance();
+            }
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Enforce 2MB limit
+            if (file.size > 2 * 1024 * 1024) {
+                alert("File size exceeds 2MB limit. Please select a smaller file.");
+                event.target.value = '';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const base64Data = e.target.result;
+                processFileIntoChunks(file.name, file.type, base64Data);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function processFileIntoChunks(name, type, dataUrl) {
+            // Construct a metadata prefix packet
+            const metaObj = {
+                n: name,
+                t: type || 'application/octet-stream',
+                d: dataUrl
+            };
+            const jsonString = JSON.stringify(metaObj);
+            
+            fileChunks = [];
+            for (let i = 0; i < jsonString.length; i += CHUNK_SIZE) {
+                fileChunks.push(jsonString.substring(i, i + CHUNK_SIZE));
+            }
+
+            const total = fileChunks.length;
+            
+            // Update UI elements
+            document.getElementById('drop-prompt').classList.add('hidden');
+            const metaDiv = document.getElementById('file-meta');
+            metaDiv.classList.remove('hidden');
+            document.getElementById('meta-name').innerText = name;
+            document.getElementById('meta-details').innerText = `${(dataUrl.length / 1024).toFixed(1)} KB base64 data | ${total} QR Frames`;
+
+            document.getElementById('action-panel').classList.remove('hidden');
+            document.getElementById('chunk-slider').max = total;
+            document.getElementById('chunk-slider').value = 1;
+
+            currentChunkIndex = 0;
+            initQR();
+            startPlayback();
+        }
+
+        function initQR() {
+            if (!qrInstance) {
+                qrInstance = new QRious({
+                    element: document.getElementById('qr-canvas'),
+                    size: 280,
+                    level: 'L',
+                    value: 'EMPTY'
+                });
+            }
+            renderCurrentChunk();
+        }
+
+        function renderCurrentChunk() {
+            if (fileChunks.length === 0) return;
+            const chunkText = fileChunks[currentChunkIndex];
+            const payload = `OFFLINEFILE|${currentChunkIndex + 1}|${fileChunks.length}|${chunkText}`;
+            
+            qrInstance.set({ value: payload });
+            document.getElementById('chunk-info').innerText = `Frame: ${currentChunkIndex + 1} / ${fileChunks.length}`;
+            document.getElementById('slider-val').innerText = currentChunkIndex + 1;
+            document.getElementById('chunk-slider').value = currentChunkIndex + 1;
+        }
+
+        function startPlayback() {
+            if (playInterval) clearInterval(playInterval);
+            isPlaying = true;
+            document.getElementById('btn-toggle-play').innerText = 'Pause Broadcast';
+            
+            playInterval = setInterval(() => {
+                if (!isPlaying) return;
+                currentChunkIndex = (currentChunkIndex + 1) % fileChunks.length;
+                renderCurrentChunk();
+            }, 300); // 300ms per frame for smooth continuous scanning
+        }
+
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            document.getElementById('btn-toggle-play').innerText = isPlaying ? 'Pause Broadcast' : 'Resume Broadcast';
+        }
+
+        function nextChunk() {
+            if (fileChunks.length === 0) return;
+            currentChunkIndex = (currentChunkIndex + 1) % fileChunks.length;
+            renderCurrentChunk();
+        }
+
+        function prevChunk() {
+            if (fileChunks.length === 0) return;
+            currentChunkIndex = (currentChunkIndex - 1 + fileChunks.length) % fileChunks.length;
+            renderCurrentChunk();
+        }
+
+        function onSliderChange(val) {
+            currentChunkIndex = parseInt(val) - 1;
+            renderCurrentChunk();
+        }
+
+        function resetSend() {
+            if (playInterval) clearInterval(playInterval);
+            fileChunks = [];
+            currentChunkIndex = 0;
+            document.getElementById('file-input').value = '';
+            document.getElementById('drop-prompt').classList.remove('hidden');
+            document.getElementById('file-meta').classList.add('hidden');
+            document.getElementById('action-panel').classList.add('hidden');
+        }
+
+        function initScannerInstance() {
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("reader");
+            }
+        }
+
+        function startScanner() {
+            initScannerInstance();
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                onQrScanSuccess,
+                onQrScanError
+            ).then(() => {
+                document.getElementById('btn-start-scan').classList.add('hidden');
+                document.getElementById('btn-stop-scan').classList.remove('hidden');
+                document.getElementById('rx-status').innerText = 'Status: Scanning active...';
+            }).catch(err => {
+                alert("Camera initialization failed. Please ensure camera permissions are granted.");
+            });
+        }
+
+        function stopScanner() {
+            if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => {
+                    document.getElementById('btn-start-scan').classList.remove('hidden');
+                    document.getElementById('btn-stop-scan').classList.add('hidden');
+                    document.getElementById('rx-status').innerText = 'Status: Scanner paused.';
+                }).catch(err => console.error(err));
+            }
+        }
+
+        function onQrScanSuccess(decodedText) {
+            if (isReceivingComplete) return;
+
+            if (!decodedText.startsWith("OFFLINEFILE|")) {
+                return; // Ignore foreign QR codes
+            }
+
+            const parts = decodedText.split('|');
+            if (parts.length < 4) return;
+
+            const index = parseInt(parts[1]);
+            const total = parseInt(parts[2]);
+            const chunkContent = parts.slice(3).join('|');
+
+            totalExpectedChunks = total;
+            receivedChunksMap[index] = chunkContent;
+
+            const receivedCount = Object.keys(receivedChunksMap).length;
+            const percent = Math.round((receivedCount / total) * 100);
+
+            document.getElementById('rx-progress').innerText = `${percent}%`;
+            document.getElementById('rx-bar').style.width = `${percent}%`;
+            document.getElementById('rx-details').innerText = `Chunks received: ${receivedCount} / ${total}`;
+
+            if (receivedCount === total) {
+                assembleReceivedFile();
+            }
+        }
+
+        function onQrScanError(errorMessage) {
+            // Continuous scanning frame errors can be ignored safely
+        }
+
+        function assembleReceivedFile() {
+            isReceivingComplete = true;
+            stopScanner();
+
+            let fullJson = '';
+            for (let i = 1; i <= totalExpectedChunks; i++) {
+                if (receivedChunksMap[i]) {
+                    fullJson += receivedChunksMap[i];
+                }
+            }
+
+            try {
+                fileMetaInfo = JSON.parse(fullJson);
+                document.getElementById('rx-status').innerText = 'Status: Assembly successful.';
+                
+                const completeArea = document.getElementById('complete-area');
+                completeArea.classList.remove('hidden');
+                document.getElementById('rx-filename').innerText = fileMetaInfo.n;
+
+                const downloadLink = document.getElementById('download-link');
+                downloadLink.href = fileMetaInfo.d;
+                downloadLink.download = fileMetaInfo.n;
+
+                // Auto trigger click download option
+                downloadLink.click();
+            } catch (err) {
+                document.getElementById('rx-status').innerText = 'Status: Assembly error - corrupted packets.';
+            }
+        }
+    </script>
+</body>
+</html>
